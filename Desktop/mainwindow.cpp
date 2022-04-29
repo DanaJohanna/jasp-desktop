@@ -80,6 +80,7 @@
 #include "utilities/appdirs.h"
 #include "utilities/settings.h"
 #include "utilities/qmlutils.h"
+#include "utilities/reporter.h"
 
 #include "widgets/filemenu/filemenu.h"
 
@@ -237,7 +238,8 @@ QString MainWindow::windowTitle() const
 
 bool MainWindow::checkDoSync()
 {
-	if (checkAutomaticSync() && !MessageForwarder::showYesNo(tr("Datafile changed"), tr("The datafile that was used by this JASP file was modified. Do you want to reload the analyses with this new data?")))
+	//Only do this if we are *not* running in reporting mode. 
+	if (!_reporter && checkAutomaticSync() && !MessageForwarder::showYesNo(tr("Datafile changed"), tr("The datafile that was used by this JASP file was modified. Do you want to reload the analyses with this new data?")))
 	{
 		_preferences->setDataAutoSynchronization(false);
 		return false;
@@ -791,6 +793,9 @@ void MainWindow::analysisResultsChangedHandler(Analysis *analysis)
 
 	if(resultXmlCompare::compareResults::theOne()->testMode())
 		analysesForComparingDoneAlready();
+	
+	if(_reporter && _analyses->allFinished())
+		_reporter->analysesFinished();
 }
 
 void MainWindow::analysisSaveImageHandler(int id, QString options)
@@ -1078,7 +1083,8 @@ void MainWindow::dataSetIOCompleted(FileEvent *event)
 				//Also give it like 3secs to have the ribbon load
 				QTimer::singleShot(3000, this, &MainWindow::startComparingResults);
 			}
-
+			else if(_reporter && !_reporter->isJaspFileNotDabaseOrSynching())
+					exit(12);			
 		}
 		else
 		{
@@ -1135,7 +1141,8 @@ void MainWindow::dataSetIOCompleted(FileEvent *event)
 			setWelcomePageVisible(true);
 			_engineSync->cleanUpAfterClose();
 
-			if (_applicationExiting)	QApplication::exit();
+			if (_applicationExiting)	
+				QApplication::exit();
 			else
 			{
 				setDataPanelVisible(false);
@@ -1578,6 +1585,11 @@ void MainWindow::testLoadedJaspFile(int timeOut, bool save)
 	QTimer::singleShot(60000 * timeOut, this, &MainWindow::unitTestTimeOut);
 }
 
+void MainWindow::reportHere(QString dir)
+{
+	_reporter = new Reporter(this, dir);
+}
+
 void MainWindow::unitTestTimeOut()
 {
 	std::cerr << "Time out for unit test!" << std::endl;
@@ -1597,26 +1609,13 @@ void MainWindow::startComparingResults()
 
 void MainWindow::analysesForComparingDoneAlready()
 {
-	if(resultXmlCompare::compareResults::theOne()->testMode() && resultXmlCompare::compareResults::theOne()->refreshed())
-	{
-		bool allCompleted = true;
-
-		_analyses->applyToSome([&](Analysis * analysis)
-		{
-			if(!analysis->isFinished())
-			{
-				allCompleted = false;
-				return false;
-			}
-			return true;
-		});
-
-		if(allCompleted)
+	if(	resultXmlCompare::compareResults::theOne()->testMode()		&& 
+		resultXmlCompare::compareResults::theOne()->refreshed()		&&
+		_analyses->allFinished()									)
 		{
 			_resultsJsInterface->exportPreviewHTML();
 			resultXmlCompare::compareResults::theOne()->setExportCalled();
 		}
-	}
 }
 
 void MainWindow::finishComparingResults()

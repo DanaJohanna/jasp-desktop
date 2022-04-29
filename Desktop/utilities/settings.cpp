@@ -73,7 +73,8 @@ const Settings::Setting Settings::Values[] = {
 	{"dbImportQuery",				""		},
 	{"dbImportInterval",			0		},
 	{"dbShowWarning",				true	},
-	{"dbRememberMe",				false	}
+	{"dbRememberMe",				false	},
+	{"showReports",					false	}
 	
 };	
 
